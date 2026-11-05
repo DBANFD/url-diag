@@ -1,0 +1,3 @@
+{
+  "endpoints": ["tenant.example", "service.example"]
+}

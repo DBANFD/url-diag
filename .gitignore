@@ -1,0 +1,23 @@
+/target/
+/results/
+
+# Local credentials and tenant-specific configuration
+.env
+.env.*
+*.pfx
+*.p12
+*.key
+/local/
+
+# Editors and OS metadata
+/.idea/
+/.vscode/
+.DS_Store
+Thumbs.db
+
+# Local work notes and vendor packages
+/memory.md
+*.zip
+*.exe
+
+/dist/

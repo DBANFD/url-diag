@@ -1,0 +1,128 @@
+[
+  {
+    "id": "akamai",
+    "name": "Akamai",
+    "url_feeds": 0,
+    "ip_feeds": 2,
+    "source": "https://docs.paloaltonetworks.com/resources/edl-hosting-service"
+  },
+  {
+    "id": "androidenterprise",
+    "name": "Android Enterprise",
+    "url_feeds": 3,
+    "ip_feeds": 0,
+    "source": "https://docs.paloaltonetworks.com/resources/edl-hosting-service"
+  },
+  {
+    "id": "atlassiancloud",
+    "name": "Atlassian Cloud",
+    "url_feeds": 0,
+    "ip_feeds": 170,
+    "source": "https://docs.paloaltonetworks.com/resources/edl-hosting-service"
+  },
+  {
+    "id": "aws",
+    "name": "Amazon Web Services",
+    "url_feeds": 0,
+    "ip_feeds": 1117,
+    "source": "https://docs.paloaltonetworks.com/resources/edl-hosting-service"
+  },
+  {
+    "id": "broadcom",
+    "name": "Broadcom",
+    "url_feeds": 20,
+    "ip_feeds": 396,
+    "source": "https://docs.paloaltonetworks.com/resources/edl-hosting-service"
+  },
+  {
+    "id": "datadog",
+    "name": "Datadog",
+    "url_feeds": 0,
+    "ip_feeds": 43,
+    "source": "https://docs.paloaltonetworks.com/resources/edl-hosting-service"
+  },
+  {
+    "id": "fastly",
+    "name": "Fastly",
+    "url_feeds": 0,
+    "ip_feeds": 2,
+    "source": "https://docs.paloaltonetworks.com/resources/edl-hosting-service"
+  },
+  {
+    "id": "gcp",
+    "name": "Google Cloud",
+    "url_feeds": 0,
+    "ip_feeds": 120,
+    "source": "https://docs.paloaltonetworks.com/resources/edl-hosting-service"
+  },
+  {
+    "id": "googleworkspace",
+    "name": "Google Workspace",
+    "url_feeds": 0,
+    "ip_feeds": 2,
+    "source": "https://docs.paloaltonetworks.com/resources/edl-hosting-service"
+  },
+  {
+    "id": "hashicorp",
+    "name": "HashiCorp",
+    "url_feeds": 0,
+    "ip_feeds": 10,
+    "source": "https://docs.paloaltonetworks.com/resources/edl-hosting-service"
+  },
+  {
+    "id": "okta",
+    "name": "Okta",
+    "url_feeds": 0,
+    "ip_feeds": 9,
+    "source": "https://docs.paloaltonetworks.com/resources/edl-hosting-service"
+  },
+  {
+    "id": "oraclecloud",
+    "name": "Oracle Cloud",
+    "url_feeds": 0,
+    "ip_feeds": 162,
+    "source": "https://docs.paloaltonetworks.com/resources/edl-hosting-service"
+  },
+  {
+    "id": "panw",
+    "name": "Palo Alto Networks services",
+    "url_feeds": 9,
+    "ip_feeds": 0,
+    "source": "https://docs.paloaltonetworks.com/resources/edl-hosting-service"
+  },
+  {
+    "id": "samsungknox",
+    "name": "Samsung Knox",
+    "url_feeds": 15,
+    "ip_feeds": 4,
+    "source": "https://docs.paloaltonetworks.com/resources/edl-hosting-service"
+  },
+  {
+    "id": "sfdc",
+    "name": "Salesforce",
+    "url_feeds": 9,
+    "ip_feeds": 63,
+    "source": "https://docs.paloaltonetworks.com/resources/edl-hosting-service"
+  },
+  {
+    "id": "webex",
+    "name": "Cisco Webex",
+    "url_feeds": 1,
+    "ip_feeds": 1,
+    "source": "https://docs.paloaltonetworks.com/resources/edl-hosting-service"
+  },
+  {
+    "id": "zoom",
+    "name": "Zoom",
+    "url_feeds": 8,
+    "ip_feeds": 14,
+    "source": "https://docs.paloaltonetworks.com/resources/edl-hosting-service"
+  },
+  {
+    "id": "zscaler",
+    "name": "Zscaler",
+    "url_feeds": 2,
+    "ip_feeds": 10,
+    "source": "https://docs.paloaltonetworks.com/resources/edl-hosting-service"
+  }
+]
