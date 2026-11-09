@@ -96,7 +96,7 @@ impl App {
                 .iter()
                 .map(|g| {
                     format!(
-                        "{} — {} URL feeds{}",
+                        "{} - {} URL feeds{}",
                         g.name,
                         g.url_feeds,
                         if g.url_feeds == 0 {
@@ -114,7 +114,7 @@ impl App {
                 .map(|f| {
                     f.skipped
                         .iter()
-                        .map(|s| format!("{} — {}", s.entry, s.reason))
+                        .map(|s| format!("{} - {}", s.entry, s.reason))
                         .collect()
                 })
                 .unwrap_or_default(),
@@ -143,7 +143,7 @@ impl App {
                 format!("Port: {} [1..65535]", self.options.port),
                 format!("Concurrent probes: {} [1..64]", self.options.concurrency),
                 format!(
-                    "START — {} hosts × {} rounds | direct | HEAD /",
+                    "START - {} hosts × {} rounds | direct | HEAD /",
                     self.selected.len(),
                     self.options.count
                 ),
@@ -484,9 +484,9 @@ fn verdict(a: &App) -> (&'static str, Color) {
     } else if a.report.is_none() || a.attempts.is_empty() {
         ("INCOMPLETE", Color::Yellow)
     } else if a.attempts.iter().any(|x| !x.success) {
-        ("FAIL — one or more address attempts", Color::Red)
+        ("FAIL - one or more address attempts", Color::Red)
     } else {
-        ("PASS — selected transport stages", Color::Green)
+        ("PASS - selected transport stages", Color::Green)
     }
 }
 fn draw(f: &mut Frame, a: &App) {
@@ -561,10 +561,10 @@ fn draw(f: &mut Frame, a: &App) {
     let title = match a.page {
         Page::Home => " Endpoint source ",
         Page::Groups => " Non-Microsoft service groups ",
-        Page::Feeds => " URL feeds — / searches ",
-        Page::Targets if a.excluded => " Excluded entries — not tested ",
+        Page::Feeds => " URL feeds - / searches ",
+        Page::Targets if a.excluded => " Excluded entries - not tested ",
         Page::Targets => " Select concrete hosts ",
-        _ => " Test settings — review before START ",
+        _ => " Test settings - review before START ",
     };
     let mut state = ListState::default().with_selected(Some(a.cursor));
     f.render_stateful_widget(
@@ -625,7 +625,7 @@ fn draw_results(f: &mut Frame, a: &App, area: ratatui::layout::Rect) {
         f.render_widget(
             Paragraph::new(text)
                 .wrap(Wrap { trim: true })
-                .block(panel(" Evidence / interpretation — d returns to table ")),
+                .block(panel(" Evidence / interpretation - d returns to table ")),
             area,
         );
         return;
@@ -662,7 +662,7 @@ fn draw_results(f: &mut Frame, a: &App, area: ratatui::layout::Rect) {
             }
         ))
         .block(panel(
-            " Overview — HTTP error responses are not transport failures ",
+            " Overview - HTTP error responses are not transport failures ",
         )),
         parts[0],
     );
@@ -689,7 +689,7 @@ fn draw_results(f: &mut Frame, a: &App, area: ratatui::layout::Rect) {
         } else {
             Color::Green
         };
-        let ms = |v: Option<f64>| v.map(|n| format!("{n:.1}")).unwrap_or_else(|| "—".into());
+        let ms = |v: Option<f64>| v.map(|n| format!("{n:.1}")).unwrap_or_else(|| "-".into());
         Row::new(vec![
             x.iteration.to_string(),
             x.hostname.clone(),
@@ -755,7 +755,7 @@ fn draw_results(f: &mut Frame, a: &App, area: ratatui::layout::Rect) {
                 .collect();
             let summary = crate::statistics::summarize(&rows);
             let latency =
-                |v: Option<f64>| v.map(|n| format!("{n:.1}")).unwrap_or_else(|| "—".into());
+                |v: Option<f64>| v.map(|n| format!("{n:.1}")).unwrap_or_else(|| "-".into());
             let stats = format!(
                 "{} | OK {:.1}% | min {} / avg {} / max {} / p95 {} ms",
                 x.hostname,
