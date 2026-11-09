@@ -59,9 +59,10 @@ impl App {
             "--count",
             "3",
         ]);
-        let crate::cli::Command::Test { options, .. } = cli.command.unwrap() else {
+        let crate::cli::Command::Test { mut options, .. } = cli.command.unwrap() else {
             unreachable!()
         };
+        options.proxy = crate::proxy::session();
         Self {
             page: Page::Home,
             cursor: 0,
@@ -71,9 +72,10 @@ impl App {
             selected: BTreeSet::new(),
             feed: None,
             options,
-            status:
-                "Choose a service group or custom hostname. Probes are DIRECT; no proxy routing."
-                    .into(),
+            status: format!(
+                "Choose a service group or custom hostname. Probes use {} connections.",
+                crate::proxy::session_label()
+            ),
             input: None,
             excluded: false,
             details: false,
@@ -259,7 +261,8 @@ impl App {
             Some(std::path::Path::new(&format!("{stem}.json"))),
             Some(std::path::Path::new(&format!("{stem}.csv"))),
         )?;
-        self.status = format!("Saved {stem}.json and .csv");
+        reporting::export_html(r, std::path::Path::new(&format!("{stem}.html")))?;
+        self.status = format!("Saved {stem}.json, .csv and .html");
         Ok(())
     }
     fn accept_input(&mut self, field: &str, value: &str) -> Result<()> {
@@ -498,12 +501,16 @@ fn draw(f: &mut Frame, a: &App) {
     .split(f.area());
     let (text, color) = if matches!(a.page, Page::Running | Page::Results) {
         let (v, c) = verdict(a);
-        (format!("URL DIAG | {v} | DIRECT"), c)
+        (
+            format!("URL DIAG | {v} | {}", crate::proxy::session_label()),
+            c,
+        )
     } else {
         (
             format!(
-                "URL DIAG {} | Service connectivity workbench | DIRECT",
-                env!("CARGO_PKG_VERSION")
+                "URL DIAG {} | Service connectivity workbench | {}",
+                env!("CARGO_PKG_VERSION"),
+                crate::proxy::session_label()
             ),
             Color::Cyan,
         )
@@ -583,7 +590,9 @@ impl Drop for Restore {
     }
 }
 
-pub async fn run() -> Result<bool> {
+pub async fn run(proxy: crate::proxy::ProxyChoice) -> Result<bool> {
+    crate::proxy::plan(&proxy).map_err(anyhow::Error::msg)?;
+    crate::proxy::set_session(proxy);
     ensure!(
         std::io::stdin().is_terminal() && std::io::stdout().is_terminal(),
         "Interactive mode needs a terminal. Run url-diag --help for scripted commands."

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.0 - 2026-11-09
+
+- Optional HTTP CONNECT proxy routing for tests, feeds, profiles and the dashboard: `--proxy env` (HTTPS_PROXY/ALL_PROXY with NO_PROXY), `--proxy system` (Windows WinHTTP with its bypass list) or `--proxy http://host:port`. Direct remains the default.
+- Named proxy failures with guidance, including PROXY_AUTH_REQUIRED (407) and PROXY_CONNECT_REJECTED. Credentials are never accepted or exported.
+- `--path` and `--method get` test a documented HTTPS path. 3xx responses record a sanitized redirect location without following it.
+- Self-contained HTML reports with `--html`; the dashboard saves HTML next to JSON and CSV.
+
 ## 0.1.0 - 2026-11-05
 
 - Initial independent URL Diag repository, based on selected MIT-licensed Defender Diag components.

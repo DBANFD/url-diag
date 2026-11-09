@@ -18,12 +18,13 @@ async fn main() -> std::process::ExitCode {
 async fn execute() -> anyhow::Result<bool> {
     let cli = Cli::parse();
     let command = match cli.command {
-        None | Some(Command::Ui) => return url_diag::ui::run().await,
+        None => return url_diag::ui::run(Default::default()).await,
+        Some(Command::Ui { proxy }) => return url_diag::ui::run(proxy).await,
         Some(command) => command,
     };
     let mut source_feed = None;
     let (hosts, options) = match command {
-        Command::Ui => unreachable!(),
+        Command::Ui { .. } => unreachable!(),
         Command::Groups => {
             for g in url_diag::catalog::groups() {
                 println!(
@@ -87,5 +88,8 @@ async fn execute() -> anyhow::Result<bool> {
     report.source_feed = source_feed;
     reporting::console(&report);
     reporting::export(&report, options.output.as_deref(), options.csv.as_deref())?;
+    if let Some(path) = &options.html {
+        reporting::export_html(&report, path)?;
+    }
     Ok(report.attempts.iter().all(|a| a.success))
 }

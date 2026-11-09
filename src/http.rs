@@ -2,7 +2,7 @@ use crate::{reporting::Failure, tls::Stream};
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 pub async fn head(s: &mut Stream, host: &str, port: u16, limit: Duration) -> Result<u16, Failure> {
-    request(s, host, port, limit, crate::endpoints::GENERIC).await
+    request(s, host, port, limit, crate::endpoints::generic()).await
 }
 pub async fn request(
     s: &mut Stream,
@@ -11,6 +11,18 @@ pub async fn request(
     limit: Duration,
     plan: crate::endpoints::Probe,
 ) -> Result<u16, Failure> {
+    request_full(s, host, port, limit, plan)
+        .await
+        .map(|(status, _)| status)
+}
+/// Status plus a sanitized Location header (3xx only; query and fragment removed).
+pub async fn request_full(
+    s: &mut Stream,
+    host: &str,
+    port: u16,
+    limit: Duration,
+    plan: crate::endpoints::Probe,
+) -> Result<(u16, Option<String>), Failure> {
     let work = async {
         let request = format!(
             "{} {} HTTP/1.1\r\nHost: {host}:{port}\r\nUser-Agent: url-diag/{}\r\nConnection: close\r\n\r\n",
@@ -33,7 +45,11 @@ pub async fn request(
                     buf.clear();
                     continue;
                 }
-                return Ok(status);
+                let location = (300..400)
+                    .contains(&status)
+                    .then(|| location(&buf))
+                    .flatten();
+                return Ok((status, location));
             }
             if buf.len() >= 32768 {
                 return Err(Failure::new(
@@ -87,5 +103,46 @@ mod tests {
             404
         );
         assert!(parse_status(b"garbage 200").is_err());
+    }
+}
+/// Extracts Location, dropping any query string or fragment because redirects can
+/// carry tokens. Control characters are removed and the value is capped at 512 bytes.
+pub fn location(headers: &[u8]) -> Option<String> {
+    let text = String::from_utf8_lossy(headers);
+    let raw = text.lines().skip(1).find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        name.trim()
+            .eq_ignore_ascii_case("location")
+            .then(|| value.trim().to_string())
+    })?;
+    let cut = raw.find(['?', '#']).unwrap_or(raw.len());
+    let clean: String = raw[..cut]
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(512)
+        .collect();
+    (!clean.is_empty()).then_some(clean)
+}
+#[cfg(test)]
+mod location_tests {
+    use super::location;
+    #[test]
+    fn strips_tokens_and_controls() {
+        assert_eq!(
+            location(
+                b"HTTP/1.1 302 Found\r\nLocation: https://login.example/auth?code=secret#x\r\n\r\n"
+            )
+            .as_deref(),
+            Some("https://login.example/auth")
+        );
+        assert_eq!(
+            location(b"HTTP/1.1 301 Moved\r\nlocation:/new\r\n\r\n").as_deref(),
+            Some("/new")
+        );
+        assert_eq!(location(b"HTTP/1.1 302 Found\r\nServer: x\r\n\r\n"), None);
+        assert_eq!(
+            location(b"HTTP/1.1 302 Found\r\nLocation: ?only=query\r\n\r\n"),
+            None
+        );
     }
 }

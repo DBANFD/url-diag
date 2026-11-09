@@ -58,7 +58,7 @@ async fn verified_sni_and_http_403_are_successful_transport() {
             "localhost",
             address.port(),
             Duration::from_secs(3),
-            url_diag::endpoints::probe("service.example", 443, false)
+            url_diag::endpoints::generic()
         )
         .await
         .unwrap(),

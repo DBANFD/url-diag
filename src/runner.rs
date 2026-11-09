@@ -10,18 +10,48 @@ use std::{
     sync::Arc,
     time::Instant,
 };
+/// One probe destination: a resolved address, or a CONNECT tunnel by name.
+#[derive(Clone)]
+enum Target {
+    Direct(IpAddr),
+    Proxy(proxy::Endpoint),
+}
 async fn probe(
     host: String,
-    ip: IpAddr,
+    target: Target,
     round: u16,
     o: &Options,
     cfg: Option<Arc<rustls::ClientConfig>>,
 ) -> Attempt {
-    let mut a = Attempt::new(host.clone(), Some(ip), o.port, round);
+    let ip = match &target {
+        Target::Direct(ip) => Some(*ip),
+        Target::Proxy(_) => None,
+    };
+    let mut a = Attempt::new(host.clone(), ip, o.port, round);
     let total = Instant::now();
     let start = Instant::now();
-    let result = tcp::connect(SocketAddr::new(ip, o.port), o.timeout).await;
-    a.tcp_ms = Some(start.elapsed().as_secs_f64() * 1000.);
+    let result = match &target {
+        Target::Direct(ip) => {
+            let r = tcp::connect(SocketAddr::new(*ip, o.port), o.timeout).await;
+            a.tcp_ms = Some(start.elapsed().as_secs_f64() * 1000.);
+            r
+        }
+        Target::Proxy(p) => {
+            // tcp_ms is the proxy connection; proxy_connect_ms is the CONNECT exchange.
+            a.route = format!("proxy {p}");
+            match proxy::tunnel(p, &host, o.port, o.timeout).await {
+                Ok((s, proxy_tcp, connect)) => {
+                    a.tcp_ms = Some(proxy_tcp);
+                    a.proxy_connect_ms = Some(connect);
+                    Ok(s)
+                }
+                Err(e) => {
+                    a.tcp_ms = Some(start.elapsed().as_secs_f64() * 1000.);
+                    Err(e)
+                }
+            }
+        }
+    };
     match result {
         Err(e) => a.error = Some(e),
         Ok(stream) => {
@@ -53,11 +83,14 @@ async fn probe(
                     a.success = true;
                     if o.effective_mode() == Mode::Https {
                         let start = Instant::now();
-                        let plan = crate::endpoints::probe(&host, o.port, o.generic_http);
+                        let plan = crate::endpoints::probe(o);
                         a.http_method = Some(plan.method.into());
-                        a.http_path = Some(plan.path.into());
-                        match http::request(&mut s, &host, o.port, o.timeout, plan).await {
-                            Ok(status) => a.http_status = Some(status),
+                        a.http_path = Some(plan.path.clone());
+                        match http::request_full(&mut s, &host, o.port, o.timeout, plan).await {
+                            Ok((status, location)) => {
+                                a.http_status = Some(status);
+                                a.redirect_location = location;
+                            }
                             Err(e) => {
                                 a.success = false;
                                 a.error = Some(e);
@@ -96,6 +129,7 @@ pub async fn run_observed(
         effective.apply_preset(preset);
     }
     let o = &effective;
+    let plan = proxy::plan(&o.proxy).map_err(anyhow::Error::msg)?;
     let mut journal = o
         .journal
         .as_deref()
@@ -111,6 +145,9 @@ pub async fn run_observed(
     } else {
         (None, Vec::new())
     };
+    if plan.endpoint.is_some() && o.effective_mode() == Mode::Dns {
+        warnings.push("DNS mode resolves names locally; the configured proxy is not used.".into());
+    }
     warnings.push("Profiles contain examples only, not a complete service allowlist or proof of application health.".into());
     warnings.push("Native trust roots with rustls validation; OS revocation/AIA behavior is not reproduced. DNS cache may affect repeated results.".into());
     let mut report = Report {
@@ -128,7 +165,7 @@ pub async fn run_observed(
         }
         .into(),
         warnings,
-        proxy: proxy::detect(),
+        proxy: proxy::describe(&plan),
         dns: Vec::new(),
         attempts: Vec::new(),
         summaries: Default::default(),
@@ -145,11 +182,20 @@ pub async fn run_observed(
             }))
             .buffer_unordered(o.concurrency as usize);
         let mut resolved = Vec::new();
+        let mut tunnelled = Vec::new();
         while let Some(d) = lookups.next().await {
             if let Some(j) = &mut journal {
                 j.write("dns", &d)?;
             }
-            if d.error.is_some() || o.effective_mode() == Mode::Dns {
+            let route = if o.effective_mode() == Mode::Dns {
+                None
+            } else {
+                plan.route(&d.hostname).cloned()
+            };
+            if let Some(p) = route {
+                // The proxy resolves the name; local DNS is recorded as evidence only.
+                tunnelled.push((d.hostname.clone(), Target::Proxy(p)));
+            } else if d.error.is_some() || o.effective_mode() == Mode::Dns {
                 let mut a = Attempt::new(d.hostname.clone(), None, o.port, round);
                 a.timestamp = d.timestamp.clone();
                 a.total_ms = d.duration_ms;
@@ -168,12 +214,13 @@ pub async fn run_observed(
         }
         // Interleave addresses from different hosts, sharing one global concurrency limit.
         let max_ips = resolved.iter().map(|(_, ips)| ips.len()).max().unwrap_or(0);
-        let jobs: Vec<_> = (0..max_ips)
-            .flat_map(|index| {
-                resolved
-                    .iter()
-                    .filter_map(move |(host, ips)| ips.get(index).map(|ip| (host.clone(), *ip)))
-            })
+        let jobs: Vec<_> = tunnelled
+            .into_iter()
+            .chain((0..max_ips).flat_map(|index| {
+                resolved.iter().filter_map(move |(host, ips)| {
+                    ips.get(index).map(|ip| (host.clone(), Target::Direct(*ip)))
+                })
+            }))
             .collect();
         emit(Progress::Status(format!(
             "Round {round}/{} | {} address probes; global concurrency {}",
@@ -183,7 +230,7 @@ pub async fn run_observed(
         )));
         let mut pending = stream::iter(
             jobs.into_iter()
-                .map(|(host, ip)| probe(host, ip, round, o, cfg.clone())),
+                .map(|(host, target)| probe(host, target, round, o, cfg.clone())),
         )
         .buffer_unordered(o.concurrency as usize);
         while let Some(a) = pending.next().await {

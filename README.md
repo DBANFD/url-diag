@@ -2,7 +2,7 @@
 
 A terminal dashboard and CLI for troubleshooting connectivity to non-Microsoft cloud service groups. Built in Rust, with the familiar cyan menus, per-IP results and latency display from [Defender Diag](https://github.com/DBANFD/defender-diag).
 
-Source version **0.1.0**. MIT licensed. No vendor tools, credentials or diagnostic evidence are bundled.
+Source version **0.2.0**. MIT licensed. No vendor tools, credentials or diagnostic evidence are bundled.
 
 ## Run
 
@@ -22,6 +22,9 @@ url-diag feeds --filter zoom
 url-diag test zoom.us --mode https --count 3
 url-diag test tenant.sentinelone.net --preset tls-soak --journal attempts.jsonl
 url-diag test service.example --resolve-ip 192.0.2.10 --port 443
+url-diag test service.example --https --method get --path /api/health --html report.html
+url-diag test zoom.us --https --proxy system
+url-diag ui --proxy http://proxy.example:8080
 url-diag edl --feed https://saasedl.paloaltonetworks.com/feeds/androidenterprise/all/url --mode https --output results.json --csv attempts.csv
 url-diag profile custom --config examples/custom.json --mode tls
 ```
@@ -42,7 +45,7 @@ See [SOURCES.md](SOURCES.md) for the explicit group classification and update pr
 
 - DNS uses the OS resolver and records all returned addresses and lookup duration. Each resolved IP is tested independently with the original hostname and SNI.
 - TCP and verified TLS have separate deadlines and failure codes. Native trust roots are loaded into rustls; certificate checks are never disabled. Trusted handshakes expose TLS version, cipher, subject, issuer and expiry.
-- HTTPS sends **HEAD /** using HTTP/1.1. Any valid HTTP response completes transport, including 403, 404 and 5xx. Non-2xx responses need application-level interpretation; the tool has no provider-specific “expected error” exemptions.
+- HTTPS sends **HEAD /** using HTTP/1.1 by default. Use `--path` and `--method get` to test a documented path; the path must be ASCII without spaces or a fragment. A 3xx response records its Location (query and fragment removed) without following it. Any valid HTTP response completes transport, including 403, 404 and 5xx. Non-2xx responses need application-level interpretation; the tool has no provider-specific “expected error” exemptions.
 - PASS means all observed attempts completed the selected stages in a finished run. FAIL means at least one address attempt failed; another address may still work. INCOMPLETE means cancellation, execution failure or missing final evidence. Failed alternate IPs remain visible.
 - Summaries include success percentage, min/max/average and nearest-rank p95 for successful attempts. Host summaries are weighted by individual addresses/attempts, not a single service-health score. Connection total latency excludes DNS; DNS-only totals are lookup latency.
 
@@ -56,9 +59,9 @@ Reports can contain internal hostnames, IPs and certificate metadata. Keep them 
 
 ## Limits
 
-Direct connections only: proxy variables are detected but ignored for routing; system PAC/WinHTTP inspection and authenticated proxies are not implemented. Results need not match an application's route, identity or certificate pinning.
+Connections are direct unless `--proxy` is set: `env` (HTTPS_PROXY or ALL_PROXY with NO_PROXY), `system` (Windows WinHTTP and its bypass list) or `http://host:port`. Proxied hosts are reached by name through HTTP CONNECT, so per-IP results apply only to direct routes. PAC/WPAD, authenticated proxies and credentials in proxy URLs are not supported; a 407 reply is reported as PROXY_AUTH_REQUIRED. Results need not match an application's route, identity or certificate pinning.
 
-No DNS server override or CNAME chain display, HTTP path testing, redirects, GET fallback, HTTP/2/3, invalid-certificate inspection, revocation fetching, packet capture or application authentication. OS resolver caching affects repeated tests. Some URL feeds contain only excluded patterns and cannot run until you supply real tenant/service hostnames. A maximum of 256 concrete feed targets, 1,000 rounds and 64 concurrent probes is enforced; broad feeds over the limit require a narrower category. No scheduled background tests.
+No DNS server override or CNAME chain display, redirect following, GET fallback, request bodies, HTTP/2/3, invalid-certificate inspection, revocation fetching, packet capture or application authentication. OS resolver caching affects repeated tests. Some URL feeds contain only excluded patterns and cannot run until you supply real tenant/service hostnames. A maximum of 256 concrete feed targets, 1,000 rounds and 64 concurrent probes is enforced; broad feeds over the limit require a narrower category. No scheduled background tests.
 
 ## Development
 

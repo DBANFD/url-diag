@@ -16,7 +16,11 @@ pub enum Command {
     /// List service groups including IP-only source coverage gaps.
     Groups,
     /// Launch the interactive terminal dashboard.
-    Ui,
+    Ui {
+        /// Route for dashboard tests: direct (default), env, system or http://host:port.
+        #[arg(long, default_value = "direct", value_parser = crate::proxy::parse_choice)]
+        proxy: crate::proxy::ProxyChoice,
+    },
     /// List the bundled service URL feed catalogue.
     Feeds {
         #[arg(long, default_value = "")]
@@ -86,9 +90,51 @@ pub struct Options {
     pub output: Option<PathBuf>,
     #[arg(long)]
     pub csv: Option<PathBuf>,
-    /// Perform a HTTP/1.1 root probe after verified TLS.
+    /// Write a self-contained HTML report; never overwrites an existing file.
+    #[arg(long)]
+    pub html: Option<PathBuf>,
+    /// Perform a HTTP/1.1 probe after verified TLS (HEAD / unless --path/--method are set).
     #[arg(long)]
     pub https: bool,
+    /// Request path for HTTPS mode, e.g. /api/health. Query strings are allowed; fragments are not.
+    #[arg(long, default_value = "/", value_parser = http_path)]
+    pub path: String,
+    /// HTTP method for HTTPS mode. Only safe, bodyless methods are offered.
+    #[arg(long, value_enum, default_value = "head")]
+    pub method: HttpMethod,
+    /// Route: direct (default), env (HTTPS_PROXY/NO_PROXY), system (Windows WinHTTP) or http://host:port.
+    #[arg(long, default_value = "direct", value_parser = crate::proxy::parse_choice)]
+    pub proxy: crate::proxy::ProxyChoice,
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
+pub enum HttpMethod {
+    #[default]
+    Head,
+    Get,
+}
+impl HttpMethod {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Head => "HEAD",
+            Self::Get => "GET",
+        }
+    }
+}
+/// Validates an origin-form request target so nothing can be injected into the request line.
+pub fn http_path(s: &str) -> Result<String, String> {
+    if !s.starts_with('/') {
+        return Err("path must start with /".into());
+    }
+    if s.len() > 2048 {
+        return Err("path is limited to 2048 characters".into());
+    }
+    if s.contains('#')
+        || s.chars()
+            .any(|c| c.is_control() || c.is_whitespace() || !c.is_ascii())
+    {
+        return Err("path must be ASCII without spaces, control characters or a #fragment; percent-encode other characters".into());
+    }
+    Ok(s.to_string())
 }
 impl Options {
     pub fn apply_preset(&mut self, preset: Preset) {

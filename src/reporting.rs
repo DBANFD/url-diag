@@ -76,6 +76,10 @@ pub struct Attempt {
     pub http_status: Option<u16>,
     pub success: bool,
     pub error: Option<Failure>,
+    /// Time for the proxy CONNECT exchange when the attempt was tunnelled.
+    pub proxy_connect_ms: Option<f64>,
+    /// Sanitized Location of a 3xx response (query and fragment removed). Never followed.
+    pub redirect_location: Option<String>,
 }
 impl Attempt {
     pub fn new(host: String, ip: Option<IpAddr>, port: u16, iteration: u16) -> Self {
@@ -100,6 +104,8 @@ impl Attempt {
             http_status: None,
             success: false,
             error: None,
+            proxy_connect_ms: None,
+            redirect_location: None,
         }
     }
 }
@@ -151,6 +157,8 @@ pub fn export(report: &Report, json: Option<&Path>, csv: Option<&Path>) -> Resul
             "http_method",
             "http_path",
             "assessment",
+            "proxy_connect_ms",
+            "redirect_location",
         ])?;
         for a in &report.attempts {
             let val = |x: Option<f64>| x.map(|v| v.to_string()).unwrap_or_default();
@@ -171,6 +179,8 @@ pub fn export(report: &Report, json: Option<&Path>, csv: Option<&Path>) -> Resul
                 a.http_method.clone().unwrap_or_default(),
                 a.http_path.clone().unwrap_or_default(),
                 a.assessment.clone(),
+                val(a.proxy_connect_ms),
+                a.redirect_location.clone().unwrap_or_default(),
             ])?;
         }
         w.flush()?;
@@ -184,8 +194,14 @@ pub fn console(r: &Report) {
     );
     println!("{}", r.proxy.note);
     println!(
-        "url-diag {} | {} | DIRECT | {}",
-        r.tool_version, r.platform, r.mode
+        "url-diag {} | {} | {} | {}",
+        r.tool_version,
+        r.platform,
+        r.proxy
+            .proxy
+            .as_deref()
+            .map_or("DIRECT".to_string(), |p| format!("PROXY {p}")),
+        r.mode
     );
     for w in &r.warnings {
         println!("NOTE: {w}");
@@ -247,4 +263,164 @@ pub fn console(r: &Report) {
             s.failures
         );
     }
+}
+
+fn esc(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&#39;"),
+            c if c.is_control() && c != '\n' => out.push(' '),
+            c => out.push(c),
+        }
+    }
+    out
+}
+fn ms(v: Option<f64>) -> String {
+    v.map(|x| format!("{x:.1}")).unwrap_or_else(|| "-".into())
+}
+/// Overall label for a finished report: PASS only when every attempt succeeded.
+pub fn outcome(r: &Report) -> &'static str {
+    if r.completed_at.is_empty() || r.attempts.is_empty() {
+        "INCOMPLETE"
+    } else if r.attempts.iter().all(|a| a.success) {
+        "PASS"
+    } else {
+        "FAIL"
+    }
+}
+/// Self-contained HTML report: no scripts, no external resources, all values escaped.
+pub fn render_html(r: &Report) -> String {
+    let outcome = outcome(r);
+    let colour = match outcome {
+        "PASS" => "#1f8a4c",
+        "FAIL" => "#c0392b",
+        _ => "#b7950b",
+    };
+    let route = r.proxy.proxy.as_deref().map_or("DIRECT".to_string(), |p| {
+        format!("PROXY {p} ({})", r.proxy.source)
+    });
+    let mut h = String::new();
+    h.push_str("<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">");
+    h.push_str("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'\">");
+    h.push_str(&format!(
+        "<title>{} report</title>",
+        esc(env!("CARGO_PKG_NAME"))
+    ));
+    h.push_str("<style>body{font:14px system-ui,sans-serif;max-width:1200px;margin:32px auto;padding:0 16px;color:#1d2330}h1{margin-bottom:4px}h2{margin-top:32px}table{border-collapse:collapse;width:100%;font-size:12px}th,td{border-bottom:1px solid #d8dce6;padding:6px 8px;text-align:left;vertical-align:top;overflow-wrap:anywhere}th{background:#f2f4f8}.badge{display:inline-block;color:#fff;font-weight:700;padding:4px 12px;border-radius:4px}.ok{color:#1f8a4c}.bad{color:#c0392b}.note{background:#f6f7fa;padding:12px;border-radius:6px}@media print{h2{break-after:avoid}}</style>");
+    h.push_str(&format!(
+        "<h1>{} {}</h1>",
+        esc(env!("CARGO_PKG_NAME")),
+        esc(&r.tool_version)
+    ));
+    h.push_str(&format!(
+        "<p><span class=\"badge\" style=\"background:{colour}\">{outcome}</span> {} | {} | {} | {} attempts</p>",
+        esc(&r.platform),
+        esc(&route),
+        esc(&r.mode),
+        r.attempts.len()
+    ));
+    h.push_str(&format!(
+        "<p>Started {} | Completed {}</p>",
+        esc(&r.started_at),
+        esc(if r.completed_at.is_empty() {
+            "(not completed)"
+        } else {
+            &r.completed_at
+        })
+    ));
+    h.push_str("<p class=\"note\">PASS means every observed attempt completed the selected stages. It is not proof of service or application health. FAIL means at least one address or round failed; another address may still work.</p>");
+    h.push_str(&format!("<p class=\"note\">{}</p>", esc(&r.proxy.note)));
+    h.push_str("<h2>Summary by host</h2><table><tr><th>Host / key</th><th>Success</th><th>Min ms</th><th>Avg ms</th><th>p95 ms</th><th>Max ms</th><th>Failures</th></tr>");
+    for (key, s) in &r.summaries {
+        let failures = s
+            .failures
+            .iter()
+            .map(|(k, v)| format!("{k}: {v}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        h.push_str(&format!(
+            "<tr><td>{}</td><td class=\"{}\">{}/{} ({:.1}%)</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+            esc(key),
+            if s.successes == s.attempts { "ok" } else { "bad" },
+            s.successes,
+            s.attempts,
+            s.success_percent,
+            ms(s.min_ms),
+            ms(s.average_ms),
+            ms(s.p95_ms),
+            ms(s.max_ms),
+            esc(&failures)
+        ));
+    }
+    h.push_str("</table><h2>Attempts</h2><table><tr><th>Time</th><th>Host</th><th>Address</th><th>Round</th><th>Route</th><th>TCP</th><th>CONNECT</th><th>TLS</th><th>HTTP</th><th>Status</th><th>Result</th><th>Detail</th></tr>");
+    for a in &r.attempts {
+        let detail = a.error.as_ref().map_or_else(
+            || match &a.redirect_location {
+                Some(l) => format!(
+                    "{} {} redirects to {l} (not followed)",
+                    a.http_method.as_deref().unwrap_or(""),
+                    a.http_path.as_deref().unwrap_or("")
+                ),
+                None => a.tls_version.clone().unwrap_or_default(),
+            },
+            |e| format!("{}: {}", e.code, e.message),
+        );
+        h.push_str(&format!(
+            "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td class=\"{}\">{}</td><td>{}</td></tr>",
+            esc(&a.timestamp),
+            esc(&a.hostname),
+            esc(&a.ip.map(|i| i.to_string()).unwrap_or_else(|| "-".into())),
+            a.iteration,
+            esc(&a.route),
+            ms(a.tcp_ms),
+            ms(a.proxy_connect_ms),
+            ms(a.tls_ms),
+            ms(a.http_ms),
+            a.http_status.map(|s| s.to_string()).unwrap_or_else(|| "-".into()),
+            if a.success { "ok" } else { "bad" },
+            if a.success { "OK" } else { "FAILED" },
+            esc(&detail)
+        ));
+    }
+    h.push_str("</table><h2>DNS</h2><table><tr><th>Host</th><th>Round</th><th>ms</th><th>Addresses</th><th>Error</th></tr>");
+    for d in &r.dns {
+        let addrs = d
+            .addresses
+            .iter()
+            .map(|a| a.to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+        h.push_str(&format!(
+            "<tr><td>{}</td><td>{}</td><td>{:.1}</td><td>{}</td><td>{}</td></tr>",
+            esc(&d.hostname),
+            d.iteration,
+            d.duration_ms,
+            esc(&addrs),
+            esc(&d
+                .error
+                .as_ref()
+                .map(|e| format!("{}: {}", e.code, e.message))
+                .unwrap_or_default())
+        ));
+    }
+    h.push_str("</table><h2>Notes</h2><ul>");
+    for w in &r.warnings {
+        h.push_str(&format!("<li>{}</li>", esc(w)));
+    }
+    h.push_str("</ul><p>Reports can contain internal hostnames, IP addresses and certificate details. Review before sharing.</p></html>\n");
+    h
+}
+pub fn export_html(report: &Report, path: &Path) -> Result<()> {
+    use std::io::Write;
+    let mut f = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)?;
+    f.write_all(render_html(report).as_bytes())?;
+    Ok(())
 }
