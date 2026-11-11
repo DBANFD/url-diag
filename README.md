@@ -2,7 +2,7 @@
 
 A terminal dashboard and CLI for troubleshooting connectivity to non-Microsoft cloud service groups. Built in Rust, with the familiar cyan menus, per-IP results and latency display from [Defender Diag](https://github.com/DBANFD/defender-diag).
 
-Source version **0.2.0**. MIT licensed. No vendor tools, credentials or diagnostic evidence are bundled.
+Source version **0.3.0**. MIT licensed. No vendor tools, credentials or diagnostic evidence are bundled.
 
 ## Run
 
@@ -59,7 +59,7 @@ Reports can contain internal hostnames, IPs and certificate metadata. Keep them 
 
 ## Limits
 
-Connections are direct unless `--proxy` is set: `env` (HTTPS_PROXY or ALL_PROXY with NO_PROXY), `system` (Windows WinHTTP and its bypass list) or `http://host:port`. Proxied hosts are reached by name through HTTP CONNECT, so per-IP results apply only to direct routes. PAC/WPAD, authenticated proxies and credentials in proxy URLs are not supported; a 407 reply is reported as PROXY_AUTH_REQUIRED. Results need not match an application's route, identity or certificate pinning.
+Connections are direct unless `--proxy` is set: `env` (HTTPS_PROXY or ALL_PROXY with NO_PROXY), `system` (Windows WinHTTP and its bypass list) or `http://host:port`. Proxied hosts are reached by name through HTTP CONNECT, so per-IP results apply only to direct routes. PAC/WPAD is not supported. Basic proxy authentication is supported with credentials from the environment: set `DIAG_PROXY_USER` and `DIAG_PROXY_PASSWORD`, or use `http://user:password@host:port` in HTTPS_PROXY/ALL_PROXY with `--proxy env`. Credentials are refused on the command line and never written to reports or journals. Basic credentials reach the proxy unencrypted. Negotiate, Kerberos and NTLM are not supported; a 407 reply is reported as PROXY_AUTH_REQUIRED (no credentials supplied) or PROXY_AUTH_FAILED (credentials rejected). Results need not match an application's route, identity or certificate pinning.
 
 No DNS server override or CNAME chain display, redirect following, GET fallback, request bodies, HTTP/2/3, invalid-certificate inspection, revocation fetching, packet capture or application authentication. OS resolver caching affects repeated tests. Some URL feeds contain only excluded patterns and cannot run until you supply real tenant/service hostnames. A maximum of 256 concrete feed targets, 1,000 rounds and 64 concurrent probes is enforced; broad feeds over the limit require a narrower category. No scheduled background tests.
 

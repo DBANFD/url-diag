@@ -563,6 +563,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "diag-core"
+version = "0.1.0"
+source = "git+https://github.com/DBANFD/diag-core?rev=f12c21f70bd5c0f8f8e086b540e78c9004710c5f#f12c21f70bd5c0f8f8e086b540e78c9004710c5f"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "chrono",
+ "rustls",
+ "rustls-native-certs",
+ "serde",
+ "tokio",
+ "tokio-rustls",
+ "x509-parser",
+]
+
+[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2722,27 +2738,26 @@ dependencies = [
 
 [[package]]
 name = "url-diag"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "chrono",
  "clap",
  "crossterm",
  "csv",
+ "diag-core",
  "futures",
  "humantime",
  "ratatui",
  "rcgen",
  "reqwest",
  "rustls",
- "rustls-native-certs",
  "serde",
  "serde_json",
  "sha2",
  "tempfile",
  "tokio",
  "tokio-rustls",
- "x509-parser",
 ]
 
 [[package]]

@@ -11,7 +11,7 @@ UTF-8 JSON, schema_version = 2. Additive fields may appear; consumers should ign
 | platform | OS identifier |
 | mode | dns, dns_tcp, dns_tcp_tls or dns_tcp_tls_https |
 | warnings | array of diagnostic limitations/trust-loading notes |
-| proxy | environment_variables_present (names only), source (direct, explicit, environment or winhttp), proxy (http://host:port or null), bypass_rules (count only), note |
+| proxy | environment_variables_present (names only), source (direct, explicit, environment or winhttp), proxy (http://host:port or null), bypass_rules (count only), authentication ("none" or "basic"; states only whether credentials were supplied), note |
 | dns | array of DNS observations |
 | attempts | array of individual connection attempts or hostname-only DNS failures |
 | summaries | map keyed by host:hostname or ip:hostname/address |
@@ -22,7 +22,7 @@ Attempt: hostname, ip (string or null on DNS failure / DNS-only probes), port, i
 
 Certificate: subject, issuer, expires (strings parsed from X.509). Only available after trusted handshake. No assertion of root presence or revocation status.
 
-Failure: code (stable string), message (diagnostic detail; not stable for parsing). Codes: DNS_TIMEOUT, DNS_LOOKUP_FAILED, DNS_NO_ADDRESSES, TCP_TIMEOUT, TCP_REFUSED, TCP_UNREACHABLE, TCP_PERMISSION_DENIED, TCP_RESET, TCP_OTHER, TLS_INVALID_NAME, TLS_TIMEOUT, TLS_CERTIFICATE_INVALID, TLS_HANDSHAKE_FAILED, HTTP_IO, HTTP_TIMEOUT, HTTP_HEADERS_TOO_LARGE, HTTP_INVALID_RESPONSE, PROXY_TCP_TIMEOUT, PROXY_TCP_* (connection to the proxy), PROXY_TIMEOUT, PROXY_IO, PROXY_INVALID_RESPONSE, PROXY_AUTH_REQUIRED, PROXY_CONNECT_REJECTED. Configuration/report setup failures are emitted to stderr as CONFIG_OR_REPORT_ERROR, outside the report.
+Failure: code (stable string), message (diagnostic detail; not stable for parsing). Codes: DNS_TIMEOUT, DNS_LOOKUP_FAILED, DNS_NO_ADDRESSES, TCP_TIMEOUT, TCP_REFUSED, TCP_UNREACHABLE, TCP_PERMISSION_DENIED, TCP_RESET, TCP_OTHER, TLS_INVALID_NAME, TLS_TIMEOUT, TLS_CERTIFICATE_INVALID, TLS_HANDSHAKE_FAILED, HTTP_IO, HTTP_TIMEOUT, HTTP_HEADERS_TOO_LARGE, HTTP_INVALID_RESPONSE, PROXY_TCP_TIMEOUT, PROXY_TCP_* (connection to the proxy), PROXY_TIMEOUT, PROXY_IO, PROXY_INVALID_RESPONSE, PROXY_AUTH_REQUIRED, PROXY_AUTH_FAILED, PROXY_CONNECT_REJECTED. Configuration/report setup failures are emitted to stderr as CONFIG_OR_REPORT_ERROR, outside the report.
 
 Summary: attempts and successes (integers), success_percent (number 0..100), min_ms/max_ms/average_ms/p95_ms (number or null), failures (map of code to count). Latencies include successful connection attempts only; see README for DNS and hostname weighting.
 
@@ -35,6 +35,8 @@ DNS-only mode emits one hostname-level row per lookup. Its total_ms is DNS elaps
 Schema 2 includes http_method and http_path (null until an HTTP request is attempted), assessment, and diagnostic_note to JSON attempts. CSV appends http_method,http_path,assessment. success remains the raw selected-stage result; assessments never modify it. Assessment values: not_assessed (manually constructed row), stage_succeeded, response_received, review_http, transport_failure. All 5xx statuses require review; TLS errors always remain failures. Raw HTTP status and failure code are preserved.
 
 Version 0.2.0 keeps schema 2 and appends proxy_connect_ms and redirect_location (JSON and CSV). `--html` writes a self-contained HTML report with create-new semantics.
+
+Version 0.3.0 keeps schema 2 and adds proxy.authentication and the failure code PROXY_AUTH_FAILED. The Host header of HTTPS probes omits the default port 443.
 
 ## Incremental journal schema 1
 Optional CLI --journal / automatic UI results/attempts-*.jsonl writes one envelope per line: journal_schema=1, kind=start|dns|attempt|end, data=object. Start includes timestamp, tool version, hosts, effective mode/count/interval/stage timeout/concurrency. DNS and attempt payloads use the existing types above. End records completion time and attempt count. Missing end is an incomplete run; ignore an incomplete trailing line after a crash. No final success percentage is inferred from an unfinished journal. Files use create-new and flush every record.

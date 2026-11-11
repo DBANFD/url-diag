@@ -64,7 +64,10 @@ pub fn failure_guidance(a: &Attempt) -> String {
             "The connection ended or failed while exchanging HTTP after TLS. A generic root/method may not be a service diagnostic; compare the documented request path."
         }
         "PROXY_AUTH_REQUIRED" => {
-            "The proxy answered 407 and requires authentication. This app does not send proxy credentials; test with a route that allows unauthenticated CONNECT."
+            "The proxy answered 407 and requires authentication. Basic credentials can be supplied with DIAG_PROXY_USER and DIAG_PROXY_PASSWORD; Negotiate, Kerberos and NTLM are not supported, so otherwise test with a route that allows unauthenticated CONNECT."
+        }
+        "PROXY_AUTH_FAILED" => {
+            "The proxy rejected the supplied Basic credentials with 407. Check the account and password, and whether the proxy accepts Basic at all; the failure message lists the schemes it offered."
         }
         "PROXY_CONNECT_REJECTED" => {
             "The proxy refused to open a tunnel to this host and port. Check the proxy allowlist or category policy for this destination."

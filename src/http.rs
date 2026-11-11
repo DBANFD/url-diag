@@ -1,6 +1,8 @@
+//! One HTTP/1.1 request over an established TLS stream. The implementation lives in
+//! diag-core; this module supplies this tool's User-Agent and probe plan.
 use crate::{reporting::Failure, tls::Stream};
+pub use diag_core::http::{location, parse_status};
 use std::time::Duration;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 pub async fn head(s: &mut Stream, host: &str, port: u16, limit: Duration) -> Result<u16, Failure> {
     request(s, host, port, limit, crate::endpoints::generic()).await
 }
@@ -23,126 +25,10 @@ pub async fn request_full(
     limit: Duration,
     plan: crate::endpoints::Probe,
 ) -> Result<(u16, Option<String>), Failure> {
-    let work = async {
-        let request = format!(
-            "{} {} HTTP/1.1\r\nHost: {host}:{port}\r\nUser-Agent: url-diag/{}\r\nConnection: close\r\n\r\n",
-            plan.method,
-            plan.path,
-            env!("CARGO_PKG_VERSION")
-        );
-        s.write_all(request.as_bytes())
-            .await
-            .map_err(|e| Failure::new("HTTP_IO", e))?;
-        s.flush().await.map_err(|e| Failure::new("HTTP_IO", e))?;
-        let mut buf = Vec::new();
-        // Bound memory even for hostile or malformed servers.
-        loop {
-            let b = s.read_u8().await.map_err(|e| Failure::new("HTTP_IO", e))?;
-            buf.push(b);
-            if buf.ends_with(b"\r\n\r\n") {
-                let status = parse_status(&buf)?;
-                if (100..200).contains(&status) && status != 101 {
-                    buf.clear();
-                    continue;
-                }
-                let location = (300..400)
-                    .contains(&status)
-                    .then(|| location(&buf))
-                    .flatten();
-                return Ok((status, location));
-            }
-            if buf.len() >= 32768 {
-                return Err(Failure::new(
-                    "HTTP_HEADERS_TOO_LARGE",
-                    "headers exceed 32 KiB",
-                ));
-            }
-        }
+    let request = diag_core::http::Request {
+        method: plan.method,
+        path: &plan.path,
+        user_agent: crate::USER_AGENT,
     };
-    tokio::time::timeout(limit, work)
-        .await
-        .map_err(|_| Failure::new("HTTP_TIMEOUT", "response headers exceeded deadline"))?
-}
-pub fn parse_status(buf: &[u8]) -> Result<u16, Failure> {
-    let line = buf.split(|b| *b == b'\n').next().unwrap_or_default();
-    let text = std::str::from_utf8(line)
-        .map_err(|_| Failure::new("HTTP_INVALID_RESPONSE", "invalid status encoding"))?;
-    let parts: Vec<_> = text.split_whitespace().collect();
-    if parts.len() < 2
-        || !matches!(parts[0], "HTTP/1.0" | "HTTP/1.1")
-        || parts[1].len() != 3
-        || !parts[1].bytes().all(|b| b.is_ascii_digit())
-    {
-        return Err(Failure::new(
-            "HTTP_INVALID_RESPONSE",
-            "invalid HTTP/1.x status line",
-        ));
-    }
-    let status = parts[1]
-        .parse::<u16>()
-        .map_err(|_| Failure::new("HTTP_INVALID_RESPONSE", "invalid status"))?;
-    if !(100..=599).contains(&status) {
-        return Err(Failure::new(
-            "HTTP_INVALID_RESPONSE",
-            "status outside 100..599",
-        ));
-    }
-    Ok(status)
-}
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn application_errors_are_transport_responses() {
-        assert_eq!(
-            parse_status(b"HTTP/1.1 403 Forbidden\r\n\r\n").unwrap(),
-            403
-        );
-        assert_eq!(
-            parse_status(b"HTTP/1.1 404 Not Found\r\n\r\n").unwrap(),
-            404
-        );
-        assert!(parse_status(b"garbage 200").is_err());
-    }
-}
-/// Extracts Location, dropping any query string or fragment because redirects can
-/// carry tokens. Control characters are removed and the value is capped at 512 bytes.
-pub fn location(headers: &[u8]) -> Option<String> {
-    let text = String::from_utf8_lossy(headers);
-    let raw = text.lines().skip(1).find_map(|line| {
-        let (name, value) = line.split_once(':')?;
-        name.trim()
-            .eq_ignore_ascii_case("location")
-            .then(|| value.trim().to_string())
-    })?;
-    let cut = raw.find(['?', '#']).unwrap_or(raw.len());
-    let clean: String = raw[..cut]
-        .chars()
-        .filter(|c| !c.is_control())
-        .take(512)
-        .collect();
-    (!clean.is_empty()).then_some(clean)
-}
-#[cfg(test)]
-mod location_tests {
-    use super::location;
-    #[test]
-    fn strips_tokens_and_controls() {
-        assert_eq!(
-            location(
-                b"HTTP/1.1 302 Found\r\nLocation: https://login.example/auth?code=secret#x\r\n\r\n"
-            )
-            .as_deref(),
-            Some("https://login.example/auth")
-        );
-        assert_eq!(
-            location(b"HTTP/1.1 301 Moved\r\nlocation:/new\r\n\r\n").as_deref(),
-            Some("/new")
-        );
-        assert_eq!(location(b"HTTP/1.1 302 Found\r\nServer: x\r\n\r\n"), None);
-        assert_eq!(
-            location(b"HTTP/1.1 302 Found\r\nLocation: ?only=query\r\n\r\n"),
-            None
-        );
-    }
+    diag_core::http::request(s, host, port, limit, request).await
 }

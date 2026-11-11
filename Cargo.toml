@@ -1,11 +1,18 @@
 [package]
 name = "url-diag"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
-description = "Evidence-oriented direct cloud connectivity diagnostics"
+description = "Evidence-oriented connectivity diagnostics for cloud service endpoints: DNS, TCP, TLS and HTTPS, direct or through a proxy"
 license = "MIT"
+rust-version = "1.88"
+repository = "https://github.com/DBANFD/url-diag"
+readme = "README.md"
+keywords = ["connectivity", "diagnostics", "tls", "proxy", "firewall"]
+categories = ["command-line-utilities", "network-programming"]
+publish = false
 
 [dependencies]
+diag-core = { git = "https://github.com/DBANFD/diag-core", rev = "f12c21f70bd5c0f8f8e086b540e78c9004710c5f" }
 anyhow = "1"
 ratatui = "0.30"
 crossterm = "0.29"
@@ -17,14 +24,16 @@ csv = "1"
 futures = "0.3"
 humantime = "2"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
-rustls-native-certs = "0.8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "time", "io-util", "sync", "process", "signal", "fs"] }
-tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
-x509-parser = "0.18"
-
-tempfile = "3"
 
 [dev-dependencies]
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+tempfile = "3"
 rcgen = "0.14"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
